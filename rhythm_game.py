@@ -22,7 +22,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 GRAY = (100, 100, 100)
 CYAN = (0, 255, 255) # 判定強化表示用
-YELLOW = (255, 255, 0) # フィーバー時のコンボ色
+YELLOW = (255, 255, 0) # フィーバー時のコンボ色 (コンボ表示用なのでそのまま)
 
 # フォントの設定
 font = pygame.font.Font(None, 48)
@@ -84,10 +84,13 @@ judgement_boost_active = False # 判定強化が現在有効か
 judgement_boost_timer = 0 # 判定強化の残り時間（フレーム数）
 
 # フィーバー演出設定
-FEVER_COMBO_THRESHOLD = 50 # フィーバーが発動するコンボ数
+FEVER_COMBO_THRESHOLD = 10 # フィーバーが発動するコンボ数
 fever_active = False # フィーバーが現在有効か (コンボ数で継続)
-fever_flash_color_timer = 0 # 色を点滅させるためのタイマー
-FEVER_FLASH_INTERVAL = 10 # 色が点滅する間隔 (フレーム数)
+fever_flash_color_timer = 0 # 色を点滅させるためのタイマー (今回は背景には使わないが、他の用途のために残しておく)
+FEVER_FLASH_INTERVAL = 120 # (今回は背景には使わないが、他の用途のために残しておく)
+
+# ★フィーバー時の背景色 (めちゃ薄い黄色)
+FEVER_BACKGROUND_COLOR = (40, 40, 0) # 黒に近い、ごく薄い黄土色 (R, G, B)
 
 judgement_effect_timer = 0
 judgement_message = ""
@@ -362,11 +365,11 @@ def update_timers() -> None:
             judgement_boost_active = False
             judgement_boost_timer = 0
 
-    # フィーバー演出の点滅タイマーを更新
+    # フィーバー演出の点滅タイマーを更新 (背景色には影響しないが、他の要素で使う可能性を考慮して残す)
     if fever_active:
         fever_flash_color_timer -= 1
         if fever_flash_color_timer <= 0:
-            fever_flash_color_timer = FEVER_FLASH_INTERVAL # 次の点滅タイミングを設定
+            fever_flash_color_timer = FEVER_FLASH_INTERVAL
 
     # 判定メッセージ表示タイマーの更新
     if judgement_effect_timer > 0:
@@ -383,12 +386,12 @@ def check_game_over() -> None:
 
 # --- 描画処理の関数群 ---
 def draw_background() -> None:
-    """ゲームの背景（レーン枠、判定ライン、対応キー）を描画します。フィーバー中は背景色を点滅させます。"""
-    # フィーバー中は背景を点滅させる
-    if fever_active and (fever_flash_color_timer > FEVER_FLASH_INTERVAL / 2):
-        screen.fill((50, 50, 0)) # 暗い黄色のような色で点滅
+    """ゲームの背景（レーン枠、判定ライン、対応キー）を描画します。フィーバー中は背景色を特別な色にします。"""
+    # ★ここが修正点！フィーバー中はずっとFEVER_BACKGROUND_COLORで背景を塗りつぶす
+    if fever_active:
+        screen.fill(FEVER_BACKGROUND_COLOR) # フィーバー中はごく薄い黄色の背景
     else:
-        screen.fill(BLACK) # 通常の背景色
+        screen.fill(BLACK) # 通常の背景は黒
 
     for i in range(LANE_COUNT):
         lane_x_start = LANE_SPACING + i * (LANE_WIDTH + LANE_SPACING)
