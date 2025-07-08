@@ -21,6 +21,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 GRAY = (100, 100, 100)
 CYAN = (0, 255, 255) # 判定強化表示用
+YELLOW = (255, 255, 0) # フィーバー時のコンボ色
 
 # フォントの設定
 font = pygame.font.Font(None, 48)
@@ -90,9 +91,15 @@ HP_LOSS_PER_MISS = 10 # 通常のミスで減るHP量
 
 # 判定強化設定
 JUDGEMENT_BOOST_COMBO_THRESHOLD = 10 # 判定強化が発動するコンボの倍数
-JUDGEMENT_BOOST_DURATION_FRAMES = 60 * 5 # 判定強化の持続時間 (3秒 = 60FPS * 3秒)
+JUDGEMENT_BOOST_DURATION_FRAMES = 60 * 5 # 判定強化の持続時間 (5秒 = 60FPS * 5秒)
 judgement_boost_active = False # 判定強化が現在有効か
 judgement_boost_timer = 0 # 判定強化の残り時間（フレーム数）
+
+# フィーバー演出設定
+FEVER_COMBO_THRESHOLD = 10 # フィーバーが発動するコンボ数
+fever_active = False # フィーバーが現在有効か (コンボ数で継続)
+fever_flash_color_timer = 0 # 色を点滅させるためのタイマー
+FEVER_FLASH_INTERVAL = 10 # 色が点滅する間隔 (フレーム数)
 
 judgement_effect_timer = 0
 judgement_message = ""
@@ -148,6 +155,8 @@ while running:
             judgement_color = WHITE
             judgement_boost_active = False # リスタート時にリセット
             judgement_boost_timer = 0 # リスタート時にリセット
+            fever_active = False # リスタート時にリセット
+            fever_flash_color_timer = 0 # リスタート時にリセット
             
             # 音楽を停止してリセット
             if pygame.mixer.get_init():
@@ -194,6 +203,12 @@ while running:
                                 judgement_boost_timer = JUDGEMENT_BOOST_DURATION_FRAMES
                                 judgement_message += " (BOOST!)" # 判定メッセージにBOOST発動を追加
                             
+                            # フィーバーの発動チェック (コンボが閾値以上になったら有効化)
+                            if combo >= FEVER_COMBO_THRESHOLD:
+                                if not fever_active: # 初めてフィーバーに入った時だけタイマーをリセット
+                                    fever_flash_color_timer = FEVER_FLASH_INTERVAL
+                                fever_active = True
+                            
                             break # ヒットが見つかったらこのレーンでの処理は終了
                 
                 if not hit_found: # キーが押されたが、有効なノーツに当たらなかった場合 (MISS)
@@ -207,6 +222,11 @@ while running:
                         game_over = True
                         if pygame.mixer.get_init():
                             pygame.mixer.music.stop()
+                    
+                    # コンボがリセットされたらフィーバーも解除
+                    fever_active = False
+                    fever_flash_color_timer = 0
+
 
     # ゲームの状態更新 (ゲームオーバーでない場合のみ)
     if not game_over:
@@ -270,6 +290,16 @@ while running:
                         game_over = True
                         if pygame.mixer.get_init():
                             pygame.mixer.music.stop()
+                    
+                    # コンボがリセットされたらフィーバーも解除
+                    fever_active = False
+                    fever_flash_color_timer = 0
+            
+            # ノーツが消えた（叩き損ねた）ことでコンボが50未満になったらフィーバー解除
+            if combo < FEVER_COMBO_THRESHOLD and fever_active:
+                fever_active = False
+                fever_flash_color_timer = 0
+
 
     # 判定強化タイマーの更新
     if judgement_boost_active:
@@ -278,11 +308,23 @@ while running:
             judgement_boost_active = False
             judgement_boost_timer = 0
 
+    # フィーバー演出の点滅タイマーを更新
+    if fever_active:
+        fever_flash_color_timer -= 1
+        if fever_flash_color_timer <= 0:
+            fever_flash_color_timer = FEVER_FLASH_INTERVAL # 次の点滅タイミングを設定
+
+
     if judgement_effect_timer > 0:
         judgement_effect_timer -= 1
 
     # 描画
-    screen.fill(BLACK)
+    # フィーバー中は背景を点滅させる
+    if fever_active and (fever_flash_color_timer > FEVER_FLASH_INTERVAL / 2):
+        screen.fill((50, 50, 0)) # 暗い黄色のような色で点滅
+    else:
+        screen.fill(BLACK) # 通常の背景色
+
     for i in range(LANE_COUNT):
         lane_x_start = LANE_SPACING + i * (LANE_WIDTH + LANE_SPACING)
         pygame.draw.rect(screen, GRAY, (lane_x_start, 0, LANE_WIDTH, SCREEN_HEIGHT), 2) # レーンの枠
@@ -299,7 +341,9 @@ while running:
 
     # スコア、コンボ、最高コンボの表示
     score_text = font.render(f"Score: {score}", True, WHITE)
-    combo_text = font.render(f"Combo: {combo}", True, WHITE)
+    # フィーバー中はコンボ文字を黄色にする
+    combo_color = YELLOW if fever_active else WHITE
+    combo_text = font.render(f"Combo: {combo}", True, combo_color)
     max_combo_text = small_font.render(f"Max Combo: {max_combo}", True, WHITE)
     
     screen.blit(score_text, (10, 10))
