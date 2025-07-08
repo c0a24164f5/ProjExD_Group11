@@ -1,6 +1,6 @@
 import pygame
-import csv # 譜面ファイルの読み込み用
-import time # ゲーム開始時間の記録用
+import csv
+import time
 import sys
 
 # Pygameの初期化
@@ -22,6 +22,7 @@ GRAY = (100, 100, 100)
 # フォントの設定
 font = pygame.font.Font(None, 48)
 small_font = pygame.font.Font(None, 36)
+finish_font = pygame.font.Font(None, 100)
 
 # ゲーム設定
 LANE_COUNT = 4
@@ -42,15 +43,12 @@ lane_keys = {
 key_to_lane_idx = {key: data["lane_idx"] for key, data in lane_keys.items()}
 lane_idx_to_key_char = {0: 'A', 1: 'S', 2: 'D', 3: 'F'}
 
-# --- ▼▼▼ ここからが大きな変更点 ▼▼▼ ---
-
 # 譜面ファイルの読み込み
 BEATMAP_FILE = 'beatmap.csv'
 BEATMAP = []
 try:
     with open(BEATMAP_FILE, 'r') as f:
         reader = csv.reader(f)
-        # [ヒットすべき時間(ms), レーン番号] のリストを作成
         BEATMAP = [[int(row[0]), int(row[1])] for row in reader]
 except FileNotFoundError:
     print(f"エラー: '{BEATMAP_FILE}' が見つかりません。")
@@ -58,17 +56,11 @@ except FileNotFoundError:
     pygame.quit()
     sys.exit()
 
-beatmap_index = 0 # 次に生成すべきノーツのインデックス
-
-# ノーツのリスト
+beatmap_index = 0
 notes = []
-
-# スコアとコンボ
 score = 0
 combo = 0
 max_combo = 0
-
-# 判定エフェクトの表示設定
 judgement_effect_timer = 0
 judgement_message = ""
 judgement_color = WHITE
@@ -88,7 +80,6 @@ game_start_time = 0
 # -------- メインのゲームループ --------
 while running:
     if not game_started and BEATMAP:
-        # 最初のノーツがあればゲームを開始
         pygame.mixer.music.play()
         game_start_time = time.time()
         game_started = True
@@ -97,57 +88,68 @@ while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
+
+        # --- ▼▼▼ ここから判定ロジックを修正 ▼▼▼ ---
         if event.type == pygame.KEYDOWN:
             if event.key in lane_keys:
                 pressed_lane_idx = key_to_lane_idx[event.key]
-                hit_found = False
-                for note in notes[:]:
-                    if note['lane'] == pressed_lane_idx and not note['hit']:
-                        if abs(note['rect'].centery - JUDGEMENT_LINE_Y) < JUDGEMENT_WINDOW:
-                            score += 100
-                            combo += 1
-                            max_combo = max(max_combo, combo)
-                            notes.remove(note)
-                            if abs(note['rect'].centery - JUDGEMENT_LINE_Y) < JUDGEMENT_WINDOW / 2:
-                                judgement_message = "PERFECT!"
-                            else:
-                                judgement_message = "GOOD!"
-                            judgement_color = GREEN
-                            judgement_effect_timer = 30
-                            hit_found = True
-                            break
-                if not hit_found:
-                    combo = 0
-                    judgement_message = "MISS!"
-                    judgement_color = RED
-                    judgement_effect_timer = 30
+                
+                # 押されたレーンに、判定ライン付近のノーツがあるかを探す
+                note_to_judge = None
+                for note in notes:
+                    if note['lane'] == pressed_lane_idx:
+                        # 判定ライン付近にある一番近いノーツを候補とする
+                        if abs(note['rect'].centery - JUDGEMENT_LINE_Y) < JUDGEMENT_WINDOW * 2: #少し広めに探す
+                           note_to_judge = note
+                           break # 候補が見つかったら探すのをやめる
+                
+                if note_to_judge:
+                    # 叩くべきノーツが近くにあった場合の処理
+                    hit_found = False
+                    # タイミングが合っているかチェック
+                    if abs(note_to_judge['rect'].centery - JUDGEMENT_LINE_Y) < JUDGEMENT_WINDOW:
+                        # ヒット成功！
+                        score += 100
+                        combo += 1
+                        max_combo = max(max_combo, combo)
+                        notes.remove(note_to_judge) # ヒットしたノーツを削除
+                        
+                        # PERFECT / GOOD の判定
+                        if abs(note_to_judge['rect'].centery - JUDGEMENT_LINE_Y) < JUDGEMENT_WINDOW / 2:
+                            judgement_message = "PERFECT!"
+                        else:
+                            judgement_message = "GOOD!"
+                        judgement_color = GREEN
+                        judgement_effect_timer = 30
+                        hit_found = True
+                    
+                    if not hit_found:
+                        # ノーツはあったが、タイミングが早すぎる/遅すぎる場合 (MISS)
+                        combo = 0
+                        judgement_message = "MISS!"
+                        judgement_color = RED
+                        judgement_effect_timer = 30
+                # else:
+                #   note_to_judge が None の場合、つまり近くに叩くべきノーツが何もない時
+                #   何もしないので、空打ちしてもMISSにならない
+
+    # --- ▲▲▲ ここまで判定ロジックを修正 ▲▲▲ ---
 
     # --- 2. ゲームの状態更新 ---
-
-    # 【変更点】ランダム生成の代わりに譜面からノーツを生成
     if game_started:
         current_game_time_ms = (time.time() - game_start_time) * 1000
-
-        # 譜面の最後までチェック
-        while beatmap_index < len(BEATMAP) and current_game_time_ms >= BEATMAP[beatmap_index][0]:
+        while beatmap_index < len(BEATMAP):
             note_data = BEATMAP[beatmap_index]
             target_time_ms = note_data[0]
-            target_lane = note_data[1]
+            if current_game_time_ms >= target_time_ms:
+                target_lane = note_data[1]
+                lane_x_start = LANE_SPACING + target_lane * (LANE_WIDTH + LANE_SPACING)
+                new_note_rect = pygame.Rect(lane_x_start, 0, LANE_WIDTH, NOTE_HEIGHT)
+                notes.append({'rect': new_note_rect, 'lane': target_lane, 'hit': False, 'spawn_time_ms': target_time_ms})
+                beatmap_index += 1
+            else:
+                break
 
-            # 新しいノーツを作成
-            lane_x_start = LANE_SPACING + target_lane * (LANE_WIDTH + LANE_SPACING)
-            new_note_rect = pygame.Rect(lane_x_start, -NOTE_HEIGHT, LANE_WIDTH, NOTE_HEIGHT)
-            # Y座標を調整：判定ラインから逆算して、正しいタイミングでラインに到達するようにする
-            # (移動フレーム数 = 距離 / 速度)
-            frames_to_travel = (JUDGEMENT_LINE_Y + NOTE_HEIGHT) / NOTE_SPEED
-            # 予めそのフレーム数分だけ上に配置しておく
-            new_note_rect.y -= frames_to_travel * NOTE_SPEED
-            
-            notes.append({'rect': new_note_rect, 'lane': target_lane, 'hit': False})
-            
-            beatmap_index += 1 # 次のノーツへ
-
-    # ノーツの移動と判定外れチェック
     for note in notes[:]:
         note['rect'].y += NOTE_SPEED
         if note['rect'].top > JUDGEMENT_LINE_Y + JUDGEMENT_WINDOW and not note['hit']:
@@ -182,6 +184,14 @@ while running:
         judgement_display = font.render(judgement_message, True, judgement_color)
         judgement_rect = judgement_display.get_rect(center=(SCREEN_WIDTH // 2, JUDGEMENT_LINE_Y - 50))
         screen.blit(judgement_display, judgement_rect)
+
+    if game_started and not pygame.mixer.music.get_busy():
+        finish_text_surface = finish_font.render("finish", True, WHITE)
+        finish_text_rect = finish_text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+        screen.blit(finish_text_surface, finish_text_rect)
+        pygame.display.flip()
+        pygame.time.wait(2000)
+        running = False
 
     pygame.display.flip()
     clock.tick(60)
