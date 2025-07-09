@@ -4,31 +4,71 @@ import time
 import sys
 import os
 
-# Pygameの初期化
+# Initialize Pygame
 pygame.init()
 pygame.mixer.init()
 
-# --- 定数と初期設定 ---
-# 画面設定
+# --- Constants and Initial Settings ---
+# Screen settings
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-pygame.display.set_caption("My Rhythm Game (最終版)")
+pygame.display.set_caption("My Rhythm Game (Final Version)")
 
-# 色の定義
+# Color definitions
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 GRAY = (100, 100, 100)
-CYAN = (0, 255, 255) # 判定強化表示用
-YELLOW = (255, 255, 0) # フィーバー時のコンボ色 (コンボ表示用なのでそのまま)
+CYAN = (0, 255, 255) # For Judgment Boost display
+YELLOW = (255, 255, 0) # For Combo during Fever (kept as is for combo display)
+BLUE = (0, 0, 255) # For Menu options
 
-# フォントの設定
-font = pygame.font.Font(None, 48)
-small_font = pygame.font.Font(None, 36)
+# Font settings
+# --- IMPORTANT: Font path for Japanese characters ---
+# This block attempts to find a Japanese font file based on common OS locations.
+# You might need to adjust the paths below based on your specific system.
+font_path = None
+try:
+    if sys.platform.startswith('win'): # Windows
+        potential_font_paths = [
+            "C:/Windows/Fonts/YuGothM.ttc", # Yu Gothic Medium
+            "C:/Windows/Fonts/meiryo.ttc",   # Meiryo UI
+            "C:/Windows/Fonts/msgothic.ttc"  # MS Gothic
+        ]
+    elif sys.platform == 'darwin': # macOS
+        potential_font_paths = [
+            "/System/Library/Fonts/AquaKana.ttc",
+            "/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", # Hiragino Maru Gothic
+            "/System/Library/Fonts/SFCompactText.ttf" # A system font, might support some Japanese
+        ]
+    else: # Linux (common paths for Noto Sans CJK JP)
+        potential_font_paths = [
+            "/usr/share/fonts/truetype/noto/NotoSansJP-Regular.ttf",
+            "/usr/share/fonts/opentype/ipafont-gothic/ipagp.ttf", # IPA P Gothic
+            "/usr/share/fonts/truetype/fonts-japanese-gothic.ttf"
+        ]
 
-# ゲーム設定
+    for path in potential_font_paths:
+        if os.path.exists(path):
+            font_path = path
+            print(f"Using font: {font_path}")
+            break
+    
+    if font_path is None:
+        print("Warning: No suitable Japanese font found at common locations. Text might appear as squares (□).")
+
+except Exception as e:
+    print(f"An error occurred while trying to find fonts: {e}")
+    font_path = None # Fallback to default if there's an issue
+
+# Actual font initialization
+font = pygame.font.Font(font_path, 48)
+large_font = pygame.font.Font(font_path, 72) # For menu title
+small_font = pygame.font.Font(font_path, 36)
+
+# Game settings
 LANE_COUNT = 4
 LANE_WIDTH = 100
 LANE_SPACING = (SCREEN_WIDTH - LANE_COUNT * LANE_WIDTH) // (LANE_COUNT + 1)
@@ -37,119 +77,134 @@ NOTE_SPEED = 5
 NOTE_HEIGHT = 20
 
 JUDGEMENT_LINE_Y = SCREEN_HEIGHT - 100
-JUDGEMENT_WINDOW = 30 # 通常のPERFECT/GOOD判定の許容範囲
+JUDGEMENT_WINDOW = 30 # Allowance for PERFECT/GOOD judgment
 
-# ノーツが画面上端から判定ラインまで落ちるのにかかる時間 (ミリ秒)
-# 60FPSを想定して計算
+# Time it takes for a note to fall from top of screen to judgment line (in ms)
+# Calculated assuming 60 FPS
 FALL_TIME_MS = (JUDGEMENT_LINE_Y + NOTE_HEIGHT) / NOTE_SPEED * (1000 / 60)
 
-# 各レーンに対応するキーと色、表示用の文字
-lane_keys = {
-    pygame.K_a: {"lane_idx": 0, "color": (255, 100, 100)},
-    pygame.K_s: {"lane_idx": 1, "color": (100, 255, 100)},
-    pygame.K_d: {"lane_idx": 2, "color": (100, 100, 255)},
-    pygame.K_f: {"lane_idx": 3, "color": (255, 255, 100)}
+# Map keys to lane indices (for input handling)
+lane_keys_input_map = {
+    pygame.K_d: {"lane_idx": 0}, # D key for lane 0
+    pygame.K_f: {"lane_idx": 1}, # F key for lane 1
+    pygame.K_j: {"lane_idx": 2}, # J key for lane 2
+    pygame.K_k: {"lane_idx": 3}  # K key for lane 3
 }
-key_to_lane_idx = {key: data["lane_idx"] for key, data in lane_keys.items()}
-lane_idx_to_key_char = {0: 'A', 1: 'S', 2: 'D', 3: 'F'}
+key_to_lane_idx = {key: data["lane_idx"] for key, data in lane_keys_input_map.items()}
 
-# 譜面ファイルと音楽ファイルのパス設定
+# Colors corresponding to each lane (for drawing)
+lane_colors = [
+    (255, 100, 100), # Color for Lane 0 (D key)
+    (100, 255, 100), # Color for Lane 1 (F key)
+    (100, 100, 255), # Color for Lane 2 (J key)
+    (255, 255, 100)  # Color for Lane 3 (K key)
+]
+
+lane_idx_to_key_char = {0: 'D', 1: 'F', 2: 'J', 3: 'K'} # Key characters for display
+
+# Beatmap and Music file path settings
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-ASSET_DIR = BASE_DIR # この例ではスクリプトと同じディレクトリをアセットディレクトリとする
+ASSET_DIR = BASE_DIR # Assuming assets are in the same directory as the script
 
-BEATMAP_FILE_NAME = 'beatmap.csv' # 必要であれば 'ex5_beatmap.csv' などに書き換える
-MUSIC_FILE_NAME = 'maou_short_14_shining_star.mp3' # 必要であれば 'ex5.mp3' などに書き換える
+BEATMAP_FILE_NAME = 'beatmap.csv' # Change if needed, e.g., 'ex5_beatmap.csv'
+MUSIC_FILE_NAME = 'maou_short_14_shining_star.mp3' # Change if needed, e.g., 'ex5.mp3'
 
 BEATMAP_FULL_PATH = os.path.join(ASSET_DIR, BEATMAP_FILE_NAME)
 MUSIC_FULL_PATH = os.path.join(ASSET_DIR, MUSIC_FILE_NAME)
 
-# --- HPバーのサイズ定義 ---
+# --- HP Bar Size Definition ---
 HP_BAR_WIDTH = 200
 HP_BAR_HEIGHT = 20
 
-# --- グローバル変数 (ゲームの状態を保持) ---
-# これらの変数は複数の関数でアクセス・更新されるため、グローバルとして定義
+# --- Game State Enums (or Constants) ---
+GAME_STATE_MENU = 0
+GAME_STATE_PLAYING = 1
+GAME_STATE_GAME_OVER = 2
+
+# --- Global Variables (holding game state) ---
 score = 0
 combo = 0
 max_combo = 0
 
 MAX_HP = 500
 current_hp = MAX_HP
-HP_LOSS_PER_MISS = 10 # 通常のミスで減るHP量
+HP_LOSS_PER_MISS = 10 # HP lost per normal miss
 
-# 判定強化設定
-JUDGEMENT_BOOST_COMBO_THRESHOLD = 10 # 判定強化が発動するコンボの倍数
-JUDGEMENT_BOOST_DURATION_FRAMES = 60 * 5 # 判定強化の持続時間 (5秒 = 60FPS * 5秒)
-judgement_boost_active = False # 判定強化が現在有効か
-judgement_boost_timer = 0 # 判定強化の残り時間（フレーム数）
+# Judgment Boost settings
+JUDGEMENT_BOOST_COMBO_THRESHOLD = 10 # Combo multiple to activate boost
+JUDGEMENT_BOOST_DURATION_FRAMES = 60 * 5 # Boost duration (5 seconds = 60FPS * 5 seconds)
+judgement_boost_active = False # Is judgment boost currently active?
+judgement_boost_timer = 0 # Remaining time for judgment boost (in frames)
 
-# フィーバー演出設定
-FEVER_COMBO_THRESHOLD = 10 # フィーバーが発動するコンボ数
-fever_active = False # フィーバーが現在有効か (コンボ数で継続)
-fever_flash_color_timer = 0 # 色を点滅させるためのタイマー (今回は背景には使わないが、他の用途のために残しておく)
-FEVER_FLASH_INTERVAL = 120 # (今回は背景には使わないが、他の用途のために残しておく)
+# Fever Mode settings
+FEVER_COMBO_THRESHOLD = 10 # Combo count to activate fever
+fever_active = False # Is fever currently active? (持續 based on combo)
+fever_flash_color_timer = 0 # Timer for color flashing (not used for background, but kept for other uses)
+FEVER_FLASH_INTERVAL = 120 # (not used for background, but kept for other uses)
 
-# ★フィーバー時の背景色 (めちゃ薄い黄色)
-FEVER_BACKGROUND_COLOR = (40, 40, 0) # 黒に近い、ごく薄い黄土色 (R, G, B)
+# Fever background color (very light yellow)
+FEVER_BACKGROUND_COLOR = (40, 40, 0) # A very faint yellowish-brown, close to black (R, G, B)
 
 judgement_effect_timer = 0
 judgement_message = ""
 judgement_color = WHITE
 
 beatmap_index = 0
-notes = [] # 現在画面に表示されているノーツのリスト
+notes = [] # List of notes currently on screen
 
-game_started = False
+# Initial game state is Menu
+game_state = GAME_STATE_MENU
 game_start_time = 0
-game_over = False
 
-# --- ファイル読み込み処理 (関数化) ---
+# --- File Loading Functions ---
 def load_beatmap(path: str) -> list[list[int]]:
     """
-    譜面ファイルを読み込み、ノーツデータ（時間、レーン）のリストを返します。
-    ファイルが見つからない場合はエラーメッセージを表示し、ゲームを終了します。
+    Loads the beatmap file and returns a list of note data (time, lane).
+    Displays an error message and exits the game if the file is not found.
     """
     try:
         if not os.path.exists(path):
-            raise FileNotFoundError(f"'{path}' が見つかりません。")
+            raise FileNotFoundError(f"'{path}' not found.")
 
         with open(path, 'r') as f:
             reader = csv.reader(f)
-            # 各行を整数に変換してリストに追加
+            # Convert each row to integers and add to list
             beatmap_data = [[int(row[0]), int(row[1])] for row in reader]
         return beatmap_data
     except FileNotFoundError as e:
-        print(f"エラー: 譜面ファイルが見つかりません。{e}")
-        print("ゲームスクリプトと同じディレクトリに 'beatmap.csv' があるか確認してください。")
-        print("または 'create_beatmap.py' を実行して譜面ファイルを作成してください。")
-        print(f"期待される譜面パス: {path}")
+        print(f"Error: Beatmap file not found. {e}")
+        print("Please ensure 'beatmap.csv' is in the same directory as the game script.")
+        print("Or run 'create_beatmap.py' to generate a beatmap file.")
+        print(f"Expected beatmap path: {path}")
         pygame.quit()
         sys.exit()
 
 def load_music(path: str) -> None:
     """
-    音楽ファイルを読み込みます。ファイルが見つからない場合やロードに失敗した場合は警告を表示します。
+    Loads the music file. Displays a warning if the file is not found or fails to load.
     """
     try:
         if not os.path.exists(path):
-            raise FileNotFoundError(f"'{path}' が見つかりません。")
+            raise FileNotFoundError(f"'{path}' not found.")
         pygame.mixer.music.load(path)
     except pygame.error as e:
-        print(f"警告: 音楽ファイルをロードできませんでした。{e}")
-        print(f"期待される音楽パス: {path}")
+        print(f"Warning: Could not load music file. {e}")
+        print(f"Expected music path: {path}")
     except FileNotFoundError as e:
-        print(f"警告: 音楽ファイルが見つかりません。{e}")
-        print(f"期待される音楽パス: {path}")
+        print(f"Warning: Music file not found. {e}")
+        print(f"Expected music path: {path}")
 
-# 譜面と音楽のロードを実行
+# Execute beatmap and music loading
 BEATMAP = load_beatmap(BEATMAP_FULL_PATH)
 load_music(MUSIC_FULL_PATH)
 
-# --- ゲームの状態をリセットする関数 (リスタート用) ---
-def reset_game_state() -> None:
-    """ゲームの全状態を初期値にリセットします。"""
+# --- Function to Reset Game State (for restart) ---
+def reset_game_state(activate_boost_initially: bool = False) -> None:
+    """Resets all game states to their initial values.
+    activate_boost_initially: Whether to activate judgment boost at the start of the game.
+    """
     global score, combo, max_combo, current_hp, notes, beatmap_index
-    global game_started, game_start_time, game_over
+    global game_state, game_start_time
     global judgement_effect_timer, judgement_message, judgement_color
     global judgement_boost_active, judgement_boost_timer
     global fever_active, fever_flash_color_timer
@@ -160,14 +215,13 @@ def reset_game_state() -> None:
     current_hp = MAX_HP
     notes.clear()
     beatmap_index = 0
-    game_started = False
+    game_state = GAME_STATE_PLAYING # Set game to playing state
     game_start_time = 0
-    game_over = False
     judgement_effect_timer = 0
     judgement_message = ""
     judgement_color = WHITE
-    judgement_boost_active = False
-    judgement_boost_timer = 0
+    judgement_boost_active = activate_boost_initially # Apply initial setting here
+    judgement_boost_timer = JUDGEMENT_BOOST_DURATION_FRAMES if activate_boost_initially else 0
     fever_active = False
     fever_flash_color_timer = 0
 
@@ -176,50 +230,62 @@ def reset_game_state() -> None:
         try:
             pygame.mixer.music.load(MUSIC_FULL_PATH)
         except (pygame.error, FileNotFoundError) as e:
-            print(f"警告: 音楽ファイルを再ロードできませんでした。{e}")
+            print(f"Warning: Could not reload music file. {e}")
 
-# --- イベント処理の関数群 ---
+# --- Event Handling Functions ---
 def handle_quit_event(event: pygame.event.Event) -> bool:
-    """QUITイベントを処理します。ゲームループを終了するかどうかを返します。"""
+    """Handles the QUIT event. Returns whether the game loop should continue."""
     if event.type == pygame.QUIT:
-        return False # runningをFalseにする
-    return True # runningをTrueのままにする
+        return False # Set running to False
+    return True # Keep running as True
 
-def handle_restart_event(event: pygame.event.Event, is_game_over: bool) -> None:
+def handle_menu_input(event: pygame.event.Event) -> None:
+    """Handles key input on the menu screen."""
+    global game_state, judgement_boost_active
+
+    if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_1: # Start without Judgment Boost
+            judgement_boost_active = False
+            reset_game_state(activate_boost_initially=False)
+        elif event.key == pygame.K_2: # Start with Judgment Boost
+            judgement_boost_active = True
+            reset_game_state(activate_boost_initially=True)
+
+def handle_game_over_input(event: pygame.event.Event) -> None:
     """
-    ゲームオーバー時にRキーが押された際のリスタート処理を行います。
-    is_game_overがTrueでRキーが押された場合のみゲーム状態をリセットします。
+    Handles restart process when 'R' key is pressed during game over.
     """
-    if is_game_over and event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-        reset_game_state()
+    global game_state
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+        game_state = GAME_STATE_MENU # Return to menu
 
 def process_key_press(event: pygame.event.Event) -> None:
     """
-    キーが押された際のノーツ判定処理を行います。
-    score, combo, max_combo, current_hp, judgement_message, judgement_color,
+    Handles note judgment when a key is pressed.
+    Updates global variables: score, combo, max_combo, current_hp, judgement_message, judgement_color,
     judgement_effect_timer, judgement_boost_active, judgement_boost_timer,
-    fever_active, fever_flash_color_timer, notes グローバル変数を更新します。
+    fever_active, fever_flash_color_timer, and notes.
     """
     global score, combo, max_combo, current_hp, judgement_message, judgement_color, judgement_effect_timer
     global judgement_boost_active, judgement_boost_timer, fever_active, fever_flash_color_timer
     global notes
 
-    # ゲームが開始していて、かつゲームオーバーでない場合のみキー入力を処理
-    if game_started and not game_over and event.key in lane_keys:
+    # Process key input only if the game is in PLAYING state
+    if game_state == GAME_STATE_PLAYING and event.key in lane_keys_input_map:
         pressed_lane_idx = key_to_lane_idx[event.key]
         hit_found = False
-        # 最も手前のノーツから判定
+        # Judge from the closest note first
         for note in reversed(notes):
             if note['lane'] == pressed_lane_idx and not note['hit']:
-                # ノーツが判定範囲（GOOD以上）に入っているかチェック
+                # Check if the note is within the judgment window (GOOD or better)
                 if abs(note['rect'].centery - JUDGEMENT_LINE_Y) < JUDGEMENT_WINDOW:
                     score += 100
                     combo += 1
                     max_combo = max(max_combo, combo)
-                    notes.remove(note) # 判定済みのノーツを削除
+                    notes.remove(note) # Remove the judged note
                     
-                    # 判定強化が有効な場合、または通常のPERFECT判定範囲内の場合、PERFECTにする
-                    # 通常PERFECTの範囲は JUDGEMENT_WINDOW / 2
+                    # If judgment boost is active, or within regular PERFECT range, make it PERFECT
+                    # Regular PERFECT range is JUDGEMENT_WINDOW / 2
                     if judgement_boost_active or abs(note['rect'].centery - JUDGEMENT_LINE_Y) < (JUDGEMENT_WINDOW / 2):
                         judgement_message = "PERFECT!"
                     else:
@@ -229,278 +295,310 @@ def process_key_press(event: pygame.event.Event) -> None:
                     judgement_effect_timer = 30
                     hit_found = True
                     
-                    # コンボが3の倍数でHP回復
+                    # Recover HP if combo is a multiple of 3
                     if combo > 0 and combo % 3 == 0:
                         hp_recovered = min(10, MAX_HP - current_hp)
                         current_hp += hp_recovered
                         if hp_recovered > 0:
                             judgement_message += f" (+{hp_recovered} HP!)"
                     
-                    # 判定強化の発動チェック
+                    # Check for Judgment Boost activation
                     if combo > 0 and combo % JUDGEMENT_BOOST_COMBO_THRESHOLD == 0:
                         judgement_boost_active = True
                         judgement_boost_timer = JUDGEMENT_BOOST_DURATION_FRAMES
-                        judgement_message += " (BOOST!)" # 判定メッセージにBOOST発動を追加
+                        judgement_message += " (BOOST!)" # Add BOOST activation message
                     
-                    # フィーバーの発動チェック (コンボが閾値以上になったら有効化)
+                    # Check for Fever activation (activate when combo reaches threshold)
                     if combo >= FEVER_COMBO_THRESHOLD:
-                        if not fever_active: # 初めてフィーバーに入った時だけタイマーをリセット
+                        if not fever_active: # Only reset timer the first time entering fever
                             fever_flash_color_timer = FEVER_FLASH_INTERVAL
                         fever_active = True
                     
-                    break # ヒットが見つかったらこのレーンでの処理は終了
-        
-        if not hit_found: # キーが押されたが、有効なノーツに当たらなかった場合 (MISS)
-            combo = 0 # コンボリセット
+                    break # Exit loop once a hit is found for this lane
+                
+        if not hit_found: # If a key was pressed but no valid note was hit (MISS)
+            combo = 0 # Reset combo
             judgement_message = "MISS!"
             judgement_color = RED
             judgement_effect_timer = 30
-            current_hp -= HP_LOSS_PER_MISS # HP減少
-            check_game_over() # HPチェックとゲームオーバー判定を呼び出す
+            current_hp -= HP_LOSS_PER_MISS # Decrease HP
+            check_game_over() # Call HP check and game over judgment
             
-            # コンボがリセットされたらフィーバーも解除
+            # Deactivate Fever if combo is reset
             fever_active = False
             fever_flash_color_timer = 0
 
 
-# --- ゲーム状態更新の関数群 ---
+# --- Game State Update Functions ---
 def check_game_start() -> None:
-    """ゲーム開始条件をチェックし、ゲームを開始します。音楽の再生も行います。"""
-    global game_started, game_start_time
-    # 音楽がロードされており、まだゲームが開始されていない場合、かつゲームオーバーでない
-    if not game_started and pygame.mixer.get_init() and BEATMAP and not game_over:
-        if not pygame.mixer.music.get_busy(): # 音楽が再生中でない場合のみ開始
+    """Checks game start conditions and starts the game. Also plays music."""
+    global game_start_time
+    # If music is loaded, game has not started, and not game over
+    if game_state == GAME_STATE_PLAYING and pygame.mixer.get_init() and BEATMAP:
+        if not pygame.mixer.music.get_busy(): # Only start if music is not already playing
             pygame.mixer.music.play()
             game_start_time = time.time()
-            game_started = True
 
 def generate_notes() -> None:
-    """譜面データに基づいてノーツを生成し、notesリストに追加します。"""
+    """Generates notes based on beatmap data and adds them to the notes list."""
     global beatmap_index, notes
-    if game_started:
+    if game_state == GAME_STATE_PLAYING:
         current_game_time_ms = (time.time() - game_start_time) * 1000
 
-        # BEATMAP[beatmap_index][0] はノーツが判定ラインに到達すべき時間
-        # FALL_TIME_MS はノーツが画面上端から判定ラインまで落ちるのにかかる時間
-        # この条件が、ノーツが生成されるべきタイミング。
+        # BEATMAP[beatmap_index][0] is the time the note should reach the judgment line
+        # FALL_TIME_MS is the time it takes for a note to fall from the top to the judgment line
+        # This condition determines when a note should be generated.
         while beatmap_index < len(BEATMAP) and current_game_time_ms >= BEATMAP[beatmap_index][0] - FALL_TIME_MS:
             note_data = BEATMAP[beatmap_index]
             target_lane = note_data[1]
 
-            # 新しいノーツを作成 (画面上端に隠れる位置からスタート)
+            # Create a new note (starts hidden at the top of the screen)
             lane_x_start = LANE_SPACING + target_lane * (LANE_WIDTH + LANE_SPACING)
             new_note_rect = pygame.Rect(lane_x_start, -NOTE_HEIGHT, LANE_WIDTH, NOTE_HEIGHT)
             
             notes.append({'rect': new_note_rect, 'lane': target_lane, 'hit': False})
             
-            beatmap_index += 1 # 次のノーツへ
+            beatmap_index += 1 # Move to the next note
 
 def update_notes_position() -> None:
     """
-    画面上のノーツの位置を更新し、判定ラインを完全に過ぎてしまったノーツを処理します。
-    (TOO LATE! / Missed Note の判定と処理を含みます)
-    score, combo, max_combo, current_hp, judgement_message, judgement_color,
+    Updates the position of notes on the screen and processes notes that have passed the judgment line.
+    (Includes "TOO LATE!" / Missed Note judgment and processing)
+    Updates global variables: score, combo, max_combo, current_hp, judgement_message, judgement_color,
     judgement_effect_timer, judgement_boost_active, judgement_boost_timer,
-    fever_active, fever_flash_color_timer グローバル変数を更新します。
+    fever_active, fever_flash_color_timer.
     """
     global score, combo, max_combo, current_hp, judgement_message, judgement_color, judgement_effect_timer
     global judgement_boost_active, judgement_boost_timer, fever_active, fever_flash_color_timer
     global notes
 
-    for note in notes[:]: # リストをコピーして要素削除時にエラーを防ぐ
+    for note in notes[:]: # Iterate over a copy of the list to safely remove elements
         note['rect'].y += NOTE_SPEED
-        # ノーツが判定ラインを完全に通り過ぎてしまった場合 (TOO LATE! / Missed Note)
+        # If the note has completely passed the judgment line (TOO LATE! / Missed Note)
         if note['rect'].top > JUDGEMENT_LINE_Y + JUDGEMENT_WINDOW and not note['hit']:
             notes.remove(note)
-            note['hit'] = True # 既に処理済みとしてマーク
+            note['hit'] = True # Mark as processed
 
             if judgement_boost_active:
-                # 判定強化中はTOO LATEもPERFECTに昇格
-                score += 100 # スコア加算
-                combo += 1 # コンボ継続
+                # If judgment boost is active, "TOO LATE!" is upgraded to "PERFECT!"
+                score += 100 # Add score
+                combo += 1 # Continue combo
                 max_combo = max(max_combo, combo)
-                judgement_message = "PERFECT! (Boosted)" # BOOSTによるPERFECTであることを示す
+                judgement_message = "PERFECT! (Boosted)" # Indicate it's a BOOSTED PERFECT
                 judgement_color = GREEN
                 judgement_effect_timer = 30
                 
-                # HP回復のチェックもここで行う (TOO LATEがPERFECTになった場合)
+                # Also check for HP recovery here (if TOO LATE became PERFECT)
                 if combo > 0 and combo % 3 == 0:
                     hp_recovered = min(10, MAX_HP - current_hp)
                     current_hp += hp_recovered
                     if hp_recovered > 0:
                         judgement_message += f" (+{hp_recovered} HP!)"
 
-                # 判定強化の発動チェック (BOOST中のBOOST発動は意味ないが、タイマーリセットのため)
+                # Check for Judgment Boost activation (even if already boosted, to reset timer)
                 if combo > 0 and combo % JUDGEMENT_BOOST_COMBO_THRESHOLD == 0:
                     judgement_boost_active = True
                     judgement_boost_timer = JUDGEMENT_BOOST_DURATION_FRAMES
-                    judgement_message += " (BOOST!)" # BOOST発動メッセージも追加
+                    judgement_message += " (BOOST!)" # Add BOOST activation message
             else:
-                # 判定強化中でない場合は通常のTOO LATE (コンボリセット & HP減少)
-                combo = 0 # コンボをリセット
-                judgement_message = "TOO LATE!" # 遅すぎた場合もMISS扱い
+                # If judgment boost is not active, it's a regular "TOO LATE!" (combo reset & HP loss)
+                combo = 0 # Reset combo
+                judgement_message = "TOO LATE!" # Treat as a MISS
                 judgement_color = RED
                 judgement_effect_timer = 30
-                current_hp -= HP_LOSS_PER_MISS # HP減少
-                check_game_over() # HPチェックとゲームオーバー判定を呼び出す
+                current_hp -= HP_LOSS_PER_MISS # Decrease HP
+                check_game_over() # Call HP check and game over judgment
                 
-                # コンボがリセットされたらフィーバーも解除
+                # Deactivate Fever if combo is reset
                 fever_active = False
                 fever_flash_color_timer = 0
     
-    # ノーツが消えた（叩き損ねた）ことでコンボがフィーバー閾値未満になったらフィーバー解除
+    # If combo drops below Fever threshold (e.g., due to a missed note), deactivate Fever
     if combo < FEVER_COMBO_THRESHOLD and fever_active:
         fever_active = False
         fever_flash_color_timer = 0
 
 def update_timers() -> None:
-    """各種タイマー（判定エフェクト、判定強化、フィーバー点滅）を更新します。"""
+    """Updates various timers (judgment effect, judgment boost, fever flash)."""
     global judgement_effect_timer, judgement_boost_timer, judgement_boost_active
     global fever_flash_color_timer, fever_active
 
-    # 判定強化タイマーの更新
+    # Update judgment boost timer
     if judgement_boost_active:
         judgement_boost_timer -= 1
         if judgement_boost_timer <= 0:
             judgement_boost_active = False
             judgement_boost_timer = 0
 
-    # フィーバー演出の点滅タイマーを更新 (背景色には影響しないが、他の要素で使う可能性を考慮して残す)
+    # Update fever effect flash timer (not directly impacting background, but kept for other potential uses)
     if fever_active:
         fever_flash_color_timer -= 1
         if fever_flash_color_timer <= 0:
             fever_flash_color_timer = FEVER_FLASH_INTERVAL
 
-    # 判定メッセージ表示タイマーの更新
+    # Update judgment message display timer
     if judgement_effect_timer > 0:
         judgement_effect_timer -= 1
 
 def check_game_over() -> None:
-    """HPが0以下になった場合にゲームオーバー状態を設定し、音楽を停止します。"""
-    global current_hp, game_over
+    """Sets game over state if HP drops to 0 or below, and stops music."""
+    global current_hp, game_state
     if current_hp <= 0:
         current_hp = 0
-        game_over = True
+        game_state = GAME_STATE_GAME_OVER
         if pygame.mixer.get_init():
             pygame.mixer.music.stop()
 
-# --- 描画処理の関数群 ---
+# --- Drawing Functions ---
 def draw_background() -> None:
-    """ゲームの背景（レーン枠、判定ライン、対応キー）を描画します。フィーバー中は背景色を特別な色にします。"""
-    # ★ここが修正点！フィーバー中はずっとFEVER_BACKGROUND_COLORで背景を塗りつぶす
-    if fever_active:
-        screen.fill(FEVER_BACKGROUND_COLOR) # フィーバー中はごく薄い黄色の背景
+    """Draws the game background (lane outlines, judgment line, corresponding keys).
+    Changes background color during Fever mode.
+    """
+    if fever_active and game_state == GAME_STATE_PLAYING: # Fever background only when playing
+        screen.fill(FEVER_BACKGROUND_COLOR) # Very faint yellow background during Fever
     else:
-        screen.fill(BLACK) # 通常の背景は黒
+        screen.fill(BLACK) # Normal background is black
 
-    for i in range(LANE_COUNT):
-        lane_x_start = LANE_SPACING + i * (LANE_WIDTH + LANE_SPACING)
-        pygame.draw.rect(screen, GRAY, (lane_x_start, 0, LANE_WIDTH, SCREEN_HEIGHT), 2) # レーンの枠
-        # レーンの下に対応するキーを表示
-        key_char_text = small_font.render(lane_idx_to_key_char[i], True, WHITE)
-        screen.blit(key_char_text, (lane_x_start + (LANE_WIDTH - key_char_text.get_width()) // 2, JUDGEMENT_LINE_Y + 50))
-    
-    # 判定ラインの背景とライン自体を描画
-    pygame.draw.rect(screen, GRAY, (0, JUDGEMENT_LINE_Y, SCREEN_WIDTH, NOTE_HEIGHT), 0)
-    pygame.draw.line(screen, WHITE, (0, JUDGEMENT_LINE_Y), (SCREEN_WIDTH, JUDGEMENT_LINE_Y), 3)
+    if game_state == GAME_STATE_PLAYING: # Only draw lanes etc. when playing
+        for i in range(LANE_COUNT):
+            lane_x_start = LANE_SPACING + i * (LANE_WIDTH + LANE_SPACING)
+            pygame.draw.rect(screen, GRAY, (lane_x_start, 0, LANE_WIDTH, SCREEN_HEIGHT), 2) # Lane outline
+            # Display corresponding key below the lane
+            key_char_text = small_font.render(lane_idx_to_key_char[i], True, WHITE)
+            screen.blit(key_char_text, (lane_x_start + (LANE_WIDTH - key_char_text.get_width()) // 2, JUDGEMENT_LINE_Y + 50))
+        
+        # Draw judgment line background and the line itself
+        pygame.draw.rect(screen, GRAY, (0, JUDGEMENT_LINE_Y, SCREEN_WIDTH, NOTE_HEIGHT), 0)
+        pygame.draw.line(screen, WHITE, (0, JUDGEMENT_LINE_Y), (SCREEN_WIDTH, JUDGEMENT_LINE_Y), 3)
 
 def draw_notes() -> None:
-    """現在画面に表示されているノーツを描画します。"""
-    for note in notes:
-        # レーンの色でノーツを描画
-        pygame.draw.rect(screen, lane_keys[list(lane_keys.keys())[note['lane']]]['color'], note['rect'])
+    """Draws notes currently on the screen."""
+    if game_state == GAME_STATE_PLAYING:
+        for note in notes:
+            # Draw note with the lane's color
+            pygame.draw.rect(screen, lane_colors[note['lane']], note['rect'])
 
 def draw_info_panel() -> None:
-    """スコア、コンボ、最高コンボ、HPバー、判定強化の残り時間を描画します。"""
-    # スコア、コンボ、最高コンボの表示
-    score_text = font.render(f"Score: {score}", True, WHITE)
-    # フィーバー中はコンボ文字を黄色にする
-    combo_color = YELLOW if fever_active else WHITE
-    combo_text = font.render(f"Combo: {combo}", True, combo_color)
-    max_combo_text = small_font.render(f"Max Combo: {max_combo}", True, WHITE)
-    
-    screen.blit(score_text, (10, 10))
-    screen.blit(combo_text, (10, 50))
-    # マックスコンボのY座標を調整してHPバーと重ならないようにする
-    screen.blit(max_combo_text, (SCREEN_WIDTH - max_combo_text.get_width() - 10, 40)) # 調整後のY座標
+    """Draws score, combo, max combo, HP bar, and remaining judgment boost time."""
+    if game_state == GAME_STATE_PLAYING:
+        # Display score, combo, max combo
+        score_text = font.render(f"Score: {score}", True, WHITE)
+        # Combo text turns yellow during Fever
+        combo_color = YELLOW if fever_active else WHITE
+        combo_text = font.render(f"Combo: {combo}", True, combo_color)
+        max_combo_text = small_font.render(f"Max Combo: {max_combo}", True, WHITE)
+        
+        screen.blit(score_text, (10, 10))
+        screen.blit(combo_text, (10, 50))
+        # Adjust Y position of max combo to avoid overlapping with HP bar
+        screen.blit(max_combo_text, (SCREEN_WIDTH - max_combo_text.get_width() - 10, 40))
 
-    # HPバーの描画
-    hp_bar_x = (SCREEN_WIDTH - HP_BAR_WIDTH) // 2
-    hp_bar_y = 10
-    hp_bar_fill_width = int(HP_BAR_WIDTH * (current_hp / MAX_HP))
-    
-    pygame.draw.rect(screen, GRAY, (hp_bar_x, hp_bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT), 2) # HPバーの枠
-    hp_fill_color = GREEN if current_hp > MAX_HP / 3 else RED # HPに応じて色を変える
-    pygame.draw.rect(screen, hp_fill_color, (hp_bar_x, hp_bar_y, hp_bar_fill_width, HP_BAR_HEIGHT)) # HPの量
-    
-    hp_text = small_font.render(f"HP: {current_hp}/{MAX_HP}", True, WHITE)
-    screen.blit(hp_text, (hp_bar_x + HP_BAR_WIDTH + 10, hp_bar_y)) # HPの数値
+        # Draw HP bar
+        hp_bar_x = (SCREEN_WIDTH - HP_BAR_WIDTH) // 2
+        hp_bar_y = 10
+        hp_bar_fill_width = int(HP_BAR_WIDTH * (current_hp / MAX_HP))
+        
+        pygame.draw.rect(screen, GRAY, (hp_bar_x, hp_bar_y, HP_BAR_WIDTH, HP_BAR_HEIGHT), 2) # HP bar outline
+        hp_fill_color = GREEN if current_hp > MAX_HP / 3 else RED # Change color based on HP
+        pygame.draw.rect(screen, hp_fill_color, (hp_bar_x, hp_bar_y, hp_bar_fill_width, HP_BAR_HEIGHT)) # HP fill
+        
+        hp_text = small_font.render(f"HP: {current_hp}/{MAX_HP}", True, WHITE)
+        screen.blit(hp_text, (hp_bar_x + HP_BAR_WIDTH + 10, hp_bar_y)) # HP value
 
-    # 判定強化の残り時間を表示
-    if judgement_boost_active:
-        boost_text = small_font.render(f"Boost: {judgement_boost_timer // 60 + 1}s", True, CYAN) # シアン色で表示
-        screen.blit(boost_text, (SCREEN_WIDTH - boost_text.get_width() - 10, 70)) # この位置も調整したよ
+        # Display remaining judgment boost time
+        if judgement_boost_active:
+            boost_text = small_font.render(f"Boost: {judgement_boost_timer // 60 + 1}s", True, CYAN) # Display in Cyan
+            screen.blit(boost_text, (SCREEN_WIDTH - boost_text.get_width() - 10, 70)) # Adjusted Y position
 
 def draw_judgement_message() -> None:
-    """判定メッセージ（PERFECT!, GOOD!, MISS!, TOO LATE!）を表示します。"""
-    if judgement_effect_timer > 0:
+    """Displays judgment messages (PERFECT!, GOOD!, MISS!, TOO LATE!)."""
+    if game_state == GAME_STATE_PLAYING and judgement_effect_timer > 0:
         judgement_display = font.render(judgement_message, True, judgement_color)
         judgement_rect = judgement_display.get_rect(center=(SCREEN_WIDTH // 2, JUDGEMENT_LINE_Y - 50))
         screen.blit(judgement_display, judgement_rect)
     
 def draw_game_over_screen() -> None:
-    """ゲームオーバー時の画面（メッセージ、最終スコア、リスタート指示）を描画します。"""
-    if game_over:
-        game_over_text = font.render("GAME OVER!", True, RED)
-        final_score_text = small_font.render(f"Final Score: {score}", True, WHITE)
-        max_combo_final_text = small_font.render(f"Max Combo: {max_combo}", True, WHITE)
+    """Draws the game over screen (message, final score, restart instruction)."""
+    if game_state == GAME_STATE_GAME_OVER:
+        game_over_text = large_font.render("GAME OVER!", True, RED)
+        final_score_text = font.render(f"Final Score: {score}", True, WHITE)
+        max_combo_final_text = font.render(f"Max Combo: {max_combo}", True, WHITE)
         
-        go_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
-        fs_rect = final_score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 10))
-        mc_rect = max_combo_final_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 50))
+        go_rect = game_over_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80))
+        fs_rect = final_score_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 20))
+        mc_rect = max_combo_final_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 30))
 
         screen.blit(game_over_text, go_rect)
         screen.blit(final_score_text, fs_rect)
         screen.blit(max_combo_final_text, mc_rect)
         
-        restart_text = small_font.render("Press R to Restart", True, WHITE)
-        restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 120))
+        restart_text = small_font.render("Rキーでメニューに戻る", True, WHITE) # Japanese text
+        restart_rect = restart_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 100))
         screen.blit(restart_text, restart_rect)
 
+def draw_menu_screen() -> None:
+    """Draws the pre-game menu screen."""
+    screen.fill(BLACK) # Menu screen has a black background
+    
+    title_text = large_font.render("My Rhythm Game", True, WHITE)
+    title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 150))
+    screen.blit(title_text, title_rect)
 
-# --- メインのゲームループ ---
+    # Option for starting without Judgment Boost (Japanese text)
+    option1_text = font.render("1: ゲームスタート (判定強化なし)", True, WHITE)
+    option1_rect = option1_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+    screen.blit(option1_text, option1_rect)
+
+    # Option for starting with Judgment Boost (Japanese text)
+    option2_text = font.render("2: ゲームスタート (判定強化あり)", True, CYAN) # Boost is Cyan
+    option2_rect = option2_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 60))
+    screen.blit(option2_text, option2_rect)
+
+    # Instruction for choosing (Japanese text)
+    info_text = small_font.render("対応する数字キーを押して選択してください", True, GRAY)
+    info_rect = info_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 + 150))
+    screen.blit(info_text, info_rect)
+
+
+# --- Main Game Loop ---
 running = True
 clock = pygame.time.Clock()
 
 while running:
-    # 音楽再生とゲーム開始のチェック
-    check_game_start()
-
-    # イベント処理
+    # Event processing
     for event in pygame.event.get():
-        running = handle_quit_event(event) # QUITイベントを処理
-        handle_restart_event(event, game_over) # ゲームオーバー時のリスタート処理
+        running = handle_quit_event(event) # Handle QUIT event
 
-        # KEYDOWNイベントの場合のみ process_key_press を呼び出す
-        if event.type == pygame.KEYDOWN:
-            process_key_press(event) # キー入力処理
+        if game_state == GAME_STATE_MENU:
+            handle_menu_input(event)
+        elif game_state == GAME_STATE_PLAYING:
+            if event.type == pygame.KEYDOWN:
+                process_key_press(event) # Handle key input
+        elif game_state == GAME_STATE_GAME_OVER:
+            handle_game_over_input(event)
 
-    # ゲームの状態更新 (ゲームオーバーでない場合のみ)
-    if not game_over:
-        generate_notes() # 譜面からノーツを生成
-        update_notes_position() # ノーツの移動と判定外れチェック
-        update_timers() # 各種タイマーの更新
-        # HPが0になったらゲームオーバーにする最終チェック
-        check_game_over() 
+    # Game state updates
+    if game_state == GAME_STATE_PLAYING:
+        check_game_start() # Check music playback and game start
+        generate_notes() # Generate notes from beatmap
+        update_notes_position() # Move notes and check for misses
+        update_timers() # Update various timers
+        check_game_over() # Final check for game over if HP drops to 0
 
-    # 描画
-    draw_background() # 背景とレーン枠、判定ライン、キーの描画
-    draw_notes() # ノーツの描画
-    draw_info_panel() # スコア、コンボ、HPバーなどの描画
-    draw_judgement_message() # 判定メッセージの描画
-    draw_game_over_screen() # ゲームオーバー画面の描画
+    # Drawing
+    screen.fill(BLACK) # Clear the screen every frame
 
-    # 画面の更新とフレームレート固定
+    if game_state == GAME_STATE_MENU:
+        draw_menu_screen()
+    elif game_state == GAME_STATE_PLAYING:
+        draw_background() # Draw background, lane outlines, judgment line, keys
+        draw_notes() # Draw notes
+        draw_info_panel() # Draw score, combo, HP bar, etc.
+        draw_judgement_message() # Draw judgment message
+    elif game_state == GAME_STATE_GAME_OVER:
+        draw_game_over_screen() # Draw game over screen (background will be black from screen.fill)
+
+    # Update display and fix frame rate
     pygame.display.flip()
     clock.tick(60)
 
