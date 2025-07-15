@@ -324,7 +324,7 @@ def main ():
                             # MISS（接触していない場合）
                             # print(f"{note_rect.centery} - {press_rect.centery}={center_diff}")
                             if time.time()-miss_invalid_time >0.2:  # 他の判定がされてからmissが表示されないための時間
-                                print(time.time()-miss_invalid_time)
+                                  # print(time.time()-miss_invalid_time) 確認用
                                 judgement_message = "MISS!"
                                 judgement_color = (255, 0, 0)
                                 combo = 0
@@ -337,13 +337,13 @@ def main ():
                             #     judgement_color = (255, 0, 0)
                             #     combo = 0
                             #     judgement_effect_timer = 30
-        #     #衝突判定colliderect
-        #     if note['rect'].top > JUDGEMENT_LINE_Y + JUDGEMENT_WINDOW and not note['hit']:
-        #         notes.remove(note)
-        #         combo = 0
-        #         judgement_message = "TOO LATE!"
-        #         judgement_color = RED
-        #         judgement_effect_timer = 30
+                    #     #衝突判定colliderect
+                    if note['rect'].top > JUDGEMENT_LINE_Y + JUDGEMENT_WINDOW and not note['hit']:
+                        notes.remove(note)
+                        combo = 0
+                        judgement_message = "TOO LATE!"
+                        judgement_color = RED
+                        judgement_effect_timer = 30
         # # --- 長押しキーとノーツとの衝突判定 ---
         # for key in held_keys: # held_keys:「今、どのキーが押され続けているか」を記録するための変数
         #     if key in pressing_notes:  # pressing_notes:a,s,d,fのキーを押したときのLong_note()の辞書
