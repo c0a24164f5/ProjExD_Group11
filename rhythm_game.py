@@ -323,7 +323,7 @@ def main ():
                         else:  # 下2桁が20の時のみロングノーツ
                             # MISS（接触していない場合）
                             # print(f"{note_rect.centery} - {press_rect.centery}={center_diff}")
-                            if time.time()-miss_invalid_time >0.035:  # 他の判定がされてからmissが表示されないための時間
+                            if time.time()-miss_invalid_time >0.2:  # 他の判定がされてからmissが表示されないための時間
                                 print(time.time()-miss_invalid_time)
                                 judgement_message = "MISS!"
                                 judgement_color = (255, 0, 0)
