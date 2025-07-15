@@ -539,11 +539,11 @@ def draw_menu_screen() -> None:
     
     # ★「君もシャイニングマスターの道へ」キャッチフレーズの表示調整
     line1_text = "音と光が織りなす究極の律動――"
-    line2_text = "君もシャイニングマスターの道へ！"
+    line2_text = "さぁ、君もシャイニングマスターの道へ！"
 
     # ここでフォントサイズを調整！両方の行に 'font' (48pt) を使用
     rendered_line1 = font.render(line1_text, True, WHITE)
-    rendered_line2 = font.render(line2_text, True, WHITE) 
+    rendered_line2 = small_font.render(line2_text, True, WHITE) 
 
     # 画面中央より少し上に配置
     # y_pos の値を調整して、文字の垂直位置と行間をコントロールします
