@@ -151,9 +151,11 @@ def main ():
 
     # ゲームループのフラグとクロック
     running = True
-    clock = pygame.time.Clock()
+    clock = pygame.time.Clock()  # fps
     game_started = False
     game_start_time = 0  # ゲーム開始時の時刻を代入する用
+
+    miss_invalid_time=0  # miss無効時間
 
     # -------- メインのゲームループ --------
     while running:
@@ -260,6 +262,7 @@ def main ():
                        
                 note_data = BEATMAP[beatmap_index]  # [[beatmap.csvにある時刻の数字,ノーツを表示するレーン番号]] 
                 target_time_ms = note_data[0]  # beatmap.csvにある時刻の数字  
+                # print(f"target_time_ms {target_time_ms },current_game_time_ms={current_game_time_ms},current_game_time_ms-target_time_ms={current_game_time_ms-target_time_ms}")  # miss無効時間
                 target_lane = note_data[1]   # beatmap.csvにあるノーツを表示するレーン番号
                 #NOTE_HEIGHT = 20  # ノーツの高さ
 
@@ -300,27 +303,33 @@ def main ():
                                 judgement_color = (255, 255, 255)
                                 score += 100
                                 combo += 1
+                                # print(f"target_time_ms {target_time_ms },current_game_time_ms={current_game_time_ms},current_game_time_ms-target_time_ms={current_game_time_ms-target_time_ms}")  # miss無効時間
+                                miss_invalid_time=time.time()  # PERFECTが描画されてる時間
                             elif center_diff < 60:
                                 judgement_message = "GOOD!"
                                 judgement_color = (0, 255, 0)
                                 score += 50
                                 combo += 1
+                                miss_invalid_time=time.time()  #　GOODが描画されてる時間
                             else:
                                 judgement_message = "BAD!"
                                 judgement_color = (100, 100, 255)
                                 combo = 0
+                                miss_invalid_time=time.time()  #　BADが描画されてる時間
                             note['hit'] = True
                             notes.remove(note)
                             judgement_effect_timer = 30
                             break
-                        else:  # 下2桁が20の時のみロングノーツa
+                        else:  # 下2桁が20の時のみロングノーツ
                             # MISS（接触していない場合）
                             # print(f"{note_rect.centery} - {press_rect.centery}={center_diff}")
-                            judgement_message = "MISS!"
-                            judgement_color = (255, 0, 0)
-                            combo = 0
-                            judgement_effect_timer = 30
-                            lane_number1=0
+                            if time.time()-miss_invalid_time >0.035:  # 他の判定がされてからmissが表示されないための時間
+                                print(time.time()-miss_invalid_time)
+                                judgement_message = "MISS!"
+                                judgement_color = (255, 0, 0)
+                                combo = 0
+                                judgement_effect_timer = 30
+                            
                                                        
                             # if center_diff>=800:
                             #     #print(f"{note_rect.centery} - {press_rect.centery}={center_diff}")
