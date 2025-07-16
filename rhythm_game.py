@@ -101,6 +101,8 @@ def main ():
         pygame.K_f: {"lane_idx": 3, "color": (255, 255, 100)}
     }
     key_to_lane_idx = {key: data["lane_idx"] for key, data in lane_keys.items()}  # dcit.items()で中身が取り出せる
+      # print(key_to_lane_idx) # 確認用 
+      # print(key_to_lane_idx[97])   # 押されたキーをkey_to_lane_idx[押されたキー]とるとlane_idxが得られる
     lane_idx_to_key_char = {0: 'A', 1: 'S', 2: 'D', 3: 'F'}
 
     held_keys = set()  # 「今、どのキーが押され続けているか」を記録するための変数
@@ -288,7 +290,7 @@ def main ():
                 pressing_notes[key].update(screen)
 
                 for note in notes[:]:
-                    if note['lane'] == key_to_lane_idx[key] and not note['hit']:
+                    if note['lane'] == key_to_lane_idx[key] and not note['hit']:  
                         press_rect = pressing_notes[key].rect
                         note_rect = note['rect']
                         center_diff = abs(note_rect.centery - press_rect.centery)
