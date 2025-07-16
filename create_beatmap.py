@@ -11,7 +11,7 @@ KEYS = {
     pygame.K_d: 2, # レーン2
     pygame.K_f: 3  # レーン3
 }
-SONG_FILE = 'maou_short_14_shining_star.mp3'
+SONG_FILE = "ex5\maou_short_14_shining_star.mp3"
 OUTPUT_CSV_FILE = 'beatmap.csv'
 
 # --- Pygameの初期化 ---
