@@ -108,6 +108,7 @@ def main ():
     held_keys = set()  # 「今、どのキーが押され続けているか」を記録するための変数
     pressing_notes = {}  # 辞書
     for key, data in lane_keys.items():  # dcit.items()で中身が取り出せる  key = pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_f
+        # print(key,data) # {key=キー押されたら(int):{レーンの番号:色}} 確認用
         lane_idx = data["lane_idx"]  # a,s,d,fに対応したレーン番号
         #color = data["color"]  # a,s,d,fに対応した色
         color = (100, 100, 100)  # 灰色
@@ -293,6 +294,7 @@ def main ():
                     if note['lane'] == key_to_lane_idx[key] and not note['hit']:  
                         press_rect = pressing_notes[key].rect
                         note_rect = note['rect']
+                        print(note_rect)
                         center_diff = abs(note_rect.centery - press_rect.centery)
                         #print(f"center_diff ={center_diff }")
                         if press_rect.colliderect(note_rect):
