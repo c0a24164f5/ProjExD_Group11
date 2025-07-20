@@ -6,105 +6,6 @@ import os
 
 from typing import List, Dict, Tuple, Optional
 
-# --- 定数設定 (Constants) ---
-SCREEN_WIDTH: int = 800
-SCREEN_HEIGHT: int = 600
-FPS: int = 60
-
-# 色定義
-WHITE: Tuple[int, int, int] = (255, 255, 255)
-BLACK: Tuple[int, int, int] = (0, 0, 0)
-RED: Tuple[int, int, int] = (255, 0, 0)
-GREEN: Tuple[int, int, int] = (0, 255, 0)
-GRAY: Tuple[int, int, int] = (100, 100, 100)
-CYAN: Tuple[int, int, int] = (0, 255, 255) # 判定強化表示用
-YELLOW: Tuple[int, int, int] = (255, 255, 0) # フィーバー時のコンボ色
-BLUE: Tuple[int, int, int] = (0, 0, 255) # メニュー選択肢用
-FEVER_BACKGROUND_COLOR: Tuple[int, int, int] = (40, 40, 0) # 黒に近い、ごく薄い黄土色 (R, G, B)
-PURPLE: Tuple[int, int, int] = (128, 0, 128) # HPバーの色として追加
-
-# レーン設定
-LANE_COUNT: int = 4
-LANE_WIDTH: int = 100
-LANE_SPACING: int = (SCREEN_WIDTH - LANE_COUNT * LANE_WIDTH) // (LANE_COUNT + 1)
-
-# ノーツ設定
-NOTE_SPEED: float = 5.0
-NOTE_HEIGHT: int = 20
-
-# 判定設定
-JUDGEMENT_LINE_Y: int = SCREEN_HEIGHT - 100
-JUDGEMENT_WINDOW_PERFECT: int = 15 # PERFECT判定の許容範囲 (JUDGEMENT_LINE_Yからの距離)
-JUDGEMENT_WINDOW_GOOD: int = 30 # GOOD判定の許容範囲 (JUDGEMENT_LINE_Yからの距離)
-JUDGEMENT_WINDOW: int = JUDGEMENT_WINDOW_GOOD # process_key_press関数で使われている汎用判定ウィンドウ
-
-# ノーツが画面上端から判定ラインまで落ちるのにかかる時間 (ミリ秒)
-FALL_TIME_MS: float = (JUDGEMENT_LINE_Y + NOTE_HEIGHT) / NOTE_SPEED * (1000 / FPS)
-
-# 各レーンに対応するキーとレーンインデックス (キー入力判定用)
-# `create_beatmap.py`と合わせたキー設定 (A, S, D, F) を使用
-key_to_lane_idx: Dict[int, int] = {
-    pygame.K_a: 0, # Aキーは0番目のレーン
-    pygame.K_s: 1, # Sキーは1番目のレーン
-    pygame.K_d: 2, # Dキーは2番目のレーン
-    pygame.K_f: 3 # Fキーは3番目のレーン
-}
-
-# 各レーンに対応する色をリストで定義 (描画用)。レーンインデックスと色が確実に一致する！
-lane_colors: List[Tuple[int, int, int]] = [
-    (255, 100, 100), # レーン0 (Aキー) の色
-    (100, 255, 100), # レーン1 (Sキー) の色
-    (100, 100, 255), # レーン2 (Dキー) の色
-    (255, 255, 100) # レーン3 (Fキー) の色
-]
-
-# レーンインデックスに対応する表示文字
-lane_idx_to_key_char: Dict[int, str] = {0: 'A', 1: 'S', 2: 'D', 3: 'F'}
-
-# 譜面ファイルと音楽ファイルのパス設定
-BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
-ASSET_DIR: str = BASE_DIR # この例ではスクリプトと同じディレクトリをアセットディレクトリとする
-
-BEATMAP_FILE_NAME: str = 'beatmap.csv'
-MUSIC_FILE_NAME: str = 'maou_short_14_shining_star.mp3'
-T_SOUND_FILE_NAME: str = 'T.mp3' # T.mp3のファイル名を追加
-
-BEATMAP_FULL_PATH: str = os.path.join(ASSET_DIR, BEATMAP_FILE_NAME)
-MUSIC_FULL_PATH: str = os.path.join(ASSET_DIR, MUSIC_FILE_NAME)
-T_SOUND_FULL_PATH: str = os.path.join(ASSET_DIR, T_SOUND_FILE_NAME) # T.mp3のフルパスを定義
-
-# --- HPバーのサイズ定義 ---
-HP_BAR_WIDTH: int = 200
-HP_BAR_HEIGHT: int = 20
-
-# --- ゲームの状態を管理するEnum (または定数) ---
-GAME_STATE_MENU: int = 0
-GAME_STATE_PLAYING: int = 1
-GAME_STATE_GAME_OVER: int = 2
-
-# --- グローバル変数 (ゲームの状態を保持) ---
-score: int = 0
-combo: int = 0
-max_combo: int = 0
-
-MAX_HP: int = 500
-current_hp: int = MAX_HP
-HP_LOSS_PER_MISS: int = 10 # 通常のミスで減るHP量
-
-# 判定強化設定
-JUDGEMENT_BOOST_COMBO_THRESHOLD: int = 10 # 判定強化が発動するコンボの倍数
-JUDGEMENT_BOOST_DURATION_FRAMES: int = FPS * 5 # 判定強化の持続時間 (5秒)
-judgement_boost_active: bool = False # 判定強化が現在有効か
-judgement_boost_timer: int = 0 # 判定強化の残り時間（フレーム数）
-
-# フィーバー演出設定
-import pygame
-import csv
-import time
-import sys
-import os 
-
-from typing import List, Dict, Tuple, Optional
 
 # --- 定数設定 (Constants) ---
 SCREEN_WIDTH: int = 800
@@ -160,6 +61,14 @@ lane_colors: List[Tuple[int, int, int]] = [
 
 # レーンインデックスに対応する表示文字
 lane_idx_to_key_char: Dict[int, str] = {0: 'A', 1: 'S', 2: 'D', 3: 'F'}
+
+# 長押しに使うdict
+lane_keys = {
+        pygame.K_a: {"lane_idx": 0, "color": (255, 100, 100)},
+        pygame.K_s: {"lane_idx": 1, "color": (100, 255, 100)},
+        pygame.K_d: {"lane_idx": 2, "color": (100, 100, 255)},
+        pygame.K_f: {"lane_idx": 3, "color": (255, 255, 100)}
+    }
 
 # 譜面ファイルと音楽ファイルのパス設定
 BASE_DIR: str = os.path.dirname(os.path.abspath(__file__))
@@ -208,7 +117,7 @@ judgement_message: str = ""
 judgement_color: Tuple[int, int, int] = WHITE
 
 beatmap_index: int = 0
-notes: List[Dict] = [] # 現在画面に表示されているノーツのリスト (辞書形式: {'rect', 'lane', 'hit'})
+notes: List[Dict] = [] # 現在画面に表示されているノーツのリスト (辞書形式: {'rect', 'lane', 'hit'})  この時点では空
 
 # ゲーム状態の初期値はメニュー
 game_state: int = GAME_STATE_MENU
@@ -222,6 +131,7 @@ pygame.init()
 pygame.mixer.init()
 screen: pygame.Surface = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 pygame.display.set_caption("君もシャイニングマスターの道へ") # タイトル名を変更
+
 
 # --- フォントの設定 ---
 font_path: Optional[str] = None
@@ -279,7 +189,7 @@ def play_sound(sound_obj: Optional[pygame.mixer.Sound]) -> None:
     if sound_obj:
         sound_obj.play()
 
-# --- レーンごとの円形エフェクトを描画 ---
+# --- レーンごとの円形エフェクトを描画 ---  
 def draw_lane_effect(screen: pygame.Surface, x_center: int, color: Tuple[int, int, int], alpha: int = 100, radius: int = 50) -> None:
     """
     指定された位置に円形のエフェクトを描画します。
@@ -287,6 +197,50 @@ def draw_lane_effect(screen: pygame.Surface, x_center: int, color: Tuple[int, in
     s = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
     pygame.draw.circle(s, color + (alpha,), (x_center, JUDGEMENT_LINE_Y), radius)
     screen.blit(s, (0, 0))
+
+#***ロングノーツのクラスの追加
+class Long_note:
+    """
+    x座標,y座標,高さ,横幅から四角を作成
+    引数1:x座標
+    引数2:y座標
+    引数3:高さ
+    引数4:横幅
+    """
+    def __init__(self, x, y, width, height, color):
+        self.rect = pygame.Rect(x, y, width, height)  # x座標,y座標,高さ,横幅から四角を作成
+        self.color = color
+          # print("Long_noteクラス")  # 確認用
+    def update(self, screen: pygame.Surface):
+        """
+        引数:画面screen
+        画面screenに四角を描画
+        """
+        pygame.draw.rect(screen, self.color, self.rect)
+          # print("update called")  # ← 呼ばれているか確認　デバッグ
+        #time.sleep(0.000000001)
+
+miss_invalid_time=0 #  *** ヒット時間用
+# *** 位置はロングノーツclassの下でないと動かない「今、どのキーが押され続けているか」を記録するための変数の設定と押されている間描画するためのコード　draw_lane_effect(screen: pygame.Surface, x_center: int, color: Tuple[int, int, int], alpha: int = 100, radius: int = 50)でそれか自身のクラスを作って透明にするか
+pressed_lane_idx=0  #  追加　自身でいじくってたら必要になった
+held_keys = set()  # 「今、どのキーが押され続けているか」を記録するための変数
+pressing_notes = {}  # 辞書
+for key, data in lane_keys.items():  # dcit.items()で中身が取り出せる  key = pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_f
+    lane_idx = key_to_lane_idx[key]  # a,s,d,fに対応したレーン番号 数字で来るのでkey_to_lane_idxに変更  
+    #color = data["color"]  # a,s,d,fに対応した色
+    color = (100, 100, 100)  # 灰色
+    lane_x = LANE_SPACING + lane_idx * (LANE_WIDTH + LANE_SPACING)  # a,s,d,fに対応したレーンに表示するx座標
+    pressing_notes[key] = Long_note(lane_x, JUDGEMENT_LINE_Y -5, LANE_WIDTH, 10, color)  # a,s,d,fのキーを押したときのLong_note()の辞書ができる
+# def make(key:int):
+    # 関数にしてprocess_key_press関数内で更新しないと動かないかも 
+    # for key, data in lane_keys.items():  # dcit.items()で中身が取り出せる  key = pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_f
+    #     lane_idx = key_to_lane_idx[key]  # a,s,d,fに対応したレーン番号 数字で来るのでkey_to_lane_idxに変更  
+    #     #color = data["color"]  # a,s,d,fに対応した色
+    #     color = (100, 100, 100)  # 灰色
+    #     lane_x = LANE_SPACING + lane_idx * (LANE_WIDTH + LANE_SPACING)  # a,s,d,fに対応したレーンに表示するx座標
+    #     pressing_notes[key] = Long_note(lane_x, JUDGEMENT_LINE_Y -5, LANE_WIDTH, 10, color)  # a,s,d,fのキーを押したときのLong_note()の辞書ができる
+
+
 
 # --- ファイル読み込み処理 (関数化) ---
 def load_beatmap(path: str) -> List[List[int]]:
@@ -380,7 +334,7 @@ def handle_menu_input(event: pygame.event.Event) -> None:
     """メニュー画面でのキー入力を処理します。"""
     global game_state, judgement_boost_active, game_start_time
 
-    if event.type == pygame.KEYDOWN:
+    if event.type == pygame.KEYDOWN:  # メニュー画面から1,2キーで選択
         if event.key == pygame.K_1: # Start without Judgment Boost
             judgement_boost_active = False
             reset_game_state(activate_boost_initially=False)
@@ -397,7 +351,7 @@ def handle_game_over_input(event: pygame.event.Event) -> None:
     ゲームオーバー時にRキーが押された際のリスタート処理を行います。
     """
     global game_state
-    if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
+    if event.type == pygame.KEYDOWN and event.key == pygame.K_r:  # rキーが押されたらリスタート
         game_state = GAME_STATE_MENU # Return to menu
 
 def process_key_press(event: pygame.event.Event) -> None:
@@ -410,58 +364,15 @@ def process_key_press(event: pygame.event.Event) -> None:
     global score, combo, max_combo, current_hp, judgement_message, judgement_color, judgement_effect_timer
     global judgement_boost_active, judgement_boost_timer, fever_active, fever_flash_color_timer
     global notes, lane_effects, lane_effect_timers
-
+    global miss_invalid_time,pressing_notes #  globalにして　関数外から持ってこないと動かない
     # Process key input only if the game is in PLAYING state
     if game_state == GAME_STATE_PLAYING and event.key in key_to_lane_idx:
-        pressed_lane_idx = key_to_lane_idx[event.key]
+        pressed_lane_idx = key_to_lane_idx[event.key]  # 押されたキーに対応した数字0,1,2,3が得られる=pressed_lane_idx
         hit_found = False
         
         # 効果音を鳴らす (T.mp3の準備が必要)
         # play_sound(t_sound) # t_soundが定義されていないためコメントアウト。必要なら定義してください。
-        
-        # 最も判定ラインに近いノーツから判定
-        for note in reversed(notes):
-            if note['lane'] == pressed_lane_idx and not note['hit']:
-                # ノーツが判定ラインの中心からどれだけ離れているか
-                distance = abs(note['rect'].centery - JUDGEMENT_LINE_Y)
 
-                # 判定強化中のPERFECT判定 (GOOD判定の範囲内であればPERFECTに昇格)
-                if judgement_boost_active and distance <= JUDGEMENT_WINDOW_GOOD:
-                    judgement_message = "PERFECT! (Boosted)"
-                    judgement_color = GREEN
-                    lane_effects[pressed_lane_idx] = GREEN # エフェクト色をPERFECTに設定
-                    score += 100
-                    combo += 1
-                    max_combo = max(max_combo, combo)
-                    notes.remove(note)
-                    note['hit'] = True # 処理済みとしてマーク
-                    hit_found = True
-                    break
-                # 通常のPERFECT判定
-                elif distance <= JUDGEMENT_WINDOW_PERFECT:
-                    judgement_message = "PERFECT!"
-                    judgement_color = GREEN
-                    lane_effects[pressed_lane_idx] = GREEN # エフェクト色をPERFECTに設定
-                    score += 100
-                    combo += 1
-                    max_combo = max(max_combo, combo)
-                    notes.remove(note)
-                    note['hit'] = True
-                    hit_found = True
-                    break
-                # GOOD判定
-                elif distance <= JUDGEMENT_WINDOW_GOOD:
-                    judgement_message = "GOOD!"
-                    judgement_color = YELLOW
-                    lane_effects[pressed_lane_idx] = YELLOW # エフェクト色をGOODに設定
-                    score += 50 # GOODで入るスコア
-                    combo += 1
-                    max_combo = max(max_combo, combo)
-                    notes.remove(note)
-                    note['hit'] = True
-                    hit_found = True
-                    break
-        
         judgement_effect_timer = 30 # 判定メッセージ表示時間
         lane_effect_timers[pressed_lane_idx] = 10 # エフェクト表示時間 (例: 10フレーム)
         
@@ -527,7 +438,7 @@ def generate_notes() -> None:
             lane_x_start = LANE_SPACING + target_lane * (LANE_WIDTH + LANE_SPACING)
             new_note_rect = pygame.Rect(lane_x_start, -NOTE_HEIGHT, LANE_WIDTH, NOTE_HEIGHT)
             
-            notes.append({'rect': new_note_rect, 'lane': target_lane, 'hit': False})
+            notes.append({'rect': new_note_rect, 'lane': target_lane, 'hit': False})  # ノーツの作成 notes=リスト[辞書形式: {'rect', 'lane', 'hit'}]
             
             beatmap_index += 1 # 次のノーツへ
 
@@ -789,27 +700,14 @@ def draw_menu_screen() -> None:
     screen.blit(info_text, info_rect)
 
 
-# --- メインのゲームループ ---
+# --- メインのゲームループ ---  # 最終的に動かすのはここ
 clock = pygame.time.Clock() # mainループの外で一度だけ初期化
 
 running = True
 while running:
-    # イベント処理
-    for event in pygame.event.get():
-        running = handle_quit_event(event) # QUITイベントを処理
-        if not running:
-            break
-
-        if game_state == GAME_STATE_MENU:
-            handle_menu_input(event)
-        elif game_state == GAME_STATE_PLAYING:
-            if event.type == pygame.KEYDOWN:
-                process_key_press(event) # キー入力処理
-        elif game_state == GAME_STATE_GAME_OVER:
-            handle_game_over_input(event)
 
     # ゲームの状態更新
-    if game_state == GAME_STATE_PLAYING:
+    if game_state == GAME_STATE_PLAYING:  # プレイ画面ならば
         check_game_start() # 音楽再生とゲーム開始のチェック (game_start_timeが0の場合のみ)
         generate_notes() # 譜面からノーツを生成
         update_notes_position() # ノーツの移動と判定外れチェック
@@ -820,15 +718,104 @@ while running:
     # 描画
     screen.fill(BLACK) # 毎フレーム画面をクリア
 
-    if game_state == GAME_STATE_MENU:
+    if game_state == GAME_STATE_MENU:  # メニュー画面ならば
         draw_menu_screen()
-    elif game_state == GAME_STATE_PLAYING:
+    elif game_state == GAME_STATE_PLAYING:  # プレイ画面ならば
         draw_background() # 背景とレーン枠、判定ライン、キーの描画
         draw_notes() # ノーツの描画
         draw_info_panel() # スコア、コンボ、HPバーなどの描画
         draw_judgement_message() # 判定メッセージの描画
-    elif game_state == GAME_STATE_GAME_OVER:
+    elif game_state == GAME_STATE_GAME_OVER:  # ゲームオーバー画面ならば
         draw_game_over_screen() # ゲームオーバー画面の描画 (背景はdraw_backgroundでBLACKになる)
+
+    for event in pygame.event.get():
+        running = handle_quit_event(event) # QUITイベントを処理  # pygameが動いているかどうか動いていなかったら→False
+        if not running:
+            break  # Falseの時終了
+
+        if game_state == GAME_STATE_MENU:
+            handle_menu_input(event)  # ゲーム開始時の選択画面関連の関数
+        elif game_state == GAME_STATE_PLAYING:  # プレイ画面ならば
+            if event.type == pygame.KEYDOWN:  
+                if event.key in lane_keys:  # 押したキーがa,s,d,f
+                    held_keys.add(event.key)  # 押したキーを集合に追加
+                process_key_press(event) # キー入力処理
+            # *** KEYUP追加
+            if event.type==pygame.KEYUP:
+                if event.key in held_keys:  #  離したキーがa,s,d,f
+                    held_keys.remove(event.key)  # 押したキーを集合から消す
+
+        elif game_state == GAME_STATE_GAME_OVER:
+            handle_game_over_input(event)
+    
+      # ノーツの判定　長押し対応
+    for key in held_keys:
+        for note in notes:  # 譜面をひとつづつ取り出す
+            # print(note) 確認用
+            if note['lane'] == pressed_lane_idx and not note['hit']:  #note['lane']にレーンの数字
+                # ノーツが判定ラインの中心からどれだけ離れているか
+                distance = abs(note['rect'].centery - JUDGEMENT_LINE_Y) # ** 自身のcente_diffと同じ
+                press_rect = pressing_notes[key].rect  
+                note_rect = note['rect']  
+                  # print(note_rect)  # 確認用　常に回っている
+                # ***衝突colliderect
+                if press_rect.colliderect(note_rect):  
+
+                    # 判定強化中のPERFECT判定 (GOOD判定の範囲内であればPERFECTに昇格)
+                    if judgement_boost_active and distance <= JUDGEMENT_WINDOW_GOOD:
+                        judgement_message = "PERFECT! (Boosted)"
+                        judgement_color = GREEN
+                        lane_effects[pressed_lane_idx] = GREEN # エフェクト色をPERFECTに設定
+                        score += 100
+                        combo += 1
+                        max_combo = max(max_combo, combo)
+                        notes.remove(note)
+                        note['hit'] = True # 処理済みとしてマーク
+                        hit_found = True
+                        miss_invalid_time=time.time()  # ロングノーツ判定用で現在の時間を取る
+                        #break
+                    # 通常のPERFECT判定
+                    elif distance <= JUDGEMENT_WINDOW_PERFECT:  # ノーツとの差が15
+                        judgement_message = "PERFECT!"
+                        judgement_color = GREEN
+                        lane_effects[pressed_lane_idx] = GREEN # エフェクト色をPERFECTに設定
+                        score += 100
+                        combo += 1
+                        max_combo = max(max_combo, combo)
+                        notes.remove(note)
+                        note['hit'] = True
+                        hit_found = True
+                        miss_invalid_time=time.time()  # # ロングノーツ判定用で現在の時間を取る
+                        #break
+                    # GOOD判定
+                    elif distance <= JUDGEMENT_WINDOW_GOOD:  # ノーツとの差が30
+                        judgement_message = "GOOD!"
+                        judgement_color = YELLOW
+                        lane_effects[pressed_lane_idx] = YELLOW # エフェクト色をGOODに設定
+                        score += 50 # GOODで入るスコア
+                        combo += 1
+                        max_combo = max(max_combo, combo)
+                        notes.remove(note)
+                        note['hit'] = True
+                        hit_found = True
+                        miss_invalid_time=time.time()  #  # ロングノーツ判定用で現在の時間を取る
+                        #break
+
+                else:
+                # MISS（接触していない場合）
+                    # print(f"{note_rect.centery} - {press_rect.centery}={distance}")
+                    if time.time()-miss_invalid_time >0.2:  # 他の判定がされてからmissが表示されないための時間
+                        #print(time.time()-miss_invalid_time) #確認用 動いてはいる
+                        judgement_message = "MISS!"
+                        judgement_color = (255, 0, 0)
+                        combo = 0
+                        judgement_effect_timer = 30
+
+    # 長押し中のノーツ表示
+    for key in held_keys:
+        if key in pressing_notes:
+            # print(f"キー: {key}, Rect: {pressing_notes[key].rect}")  # ← デバッグ出力
+            pressing_notes[key].update(screen)
 
     # 画面の更新とフレームレート固定
     pygame.display.flip()
